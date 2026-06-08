@@ -1,0 +1,87 @@
+# ============================================================
+# Travel Agency Management System
+# Production-grade .gitignore
+# Stack: Node.js + Express, PostgreSQL, Prisma ORM, IntelliJ
+# ============================================================
+
+
+# ── Environment & Secrets ───────────────────────────────────
+# NEVER commit credentials, API keys, or DB URLs
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example          # Allow the example template to be tracked
+
+
+# ── Node.js ─────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+# package-lock.json    # Uncomment if team decides not to track lockfile
+pnpm-lock.yaml
+
+
+# ── JetBrains IDEs (IntelliJ, WebStorm, etc.) ───────────────
+# .idea/dataSources.xml can contain DB credentials!
+.idea/
+*.iml
+*.iws
+*.ipr
+
+
+# ── Operating System Artifacts ───────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+
+# ── Build Outputs ────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+
+
+# ── Database & ORM (Prisma) ──────────────────────────────────
+# Keep migration files, but ignore the lock file
+prisma/migrations/**/migration_lock.toml
+# Local SQLite databases (dev/test)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+
+# ── Coverage & Test Artifacts ────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+
+# ── Editor Config (VSCode — selective) ───────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+!.vscode/extensions.json    # Allow sharing recommended extensions
+
+
+# ── Miscellaneous ────────────────────────────────────────────
+*.tmp
+*.swp
+*.swo
+*.bak
+.cache/
