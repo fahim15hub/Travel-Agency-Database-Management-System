@@ -1,0 +1,643 @@
+// ============================================================
+// Travel Agency Database Management System — Prisma Schema
+// Stack: PostgreSQL + Prisma ORM 5.22.0
+// Entities: 32 | Version: Final
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── ENUMS ────────────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  SUPER_ADMIN
+  OPS_MANAGER
+  FINANCE
+  VISA_OFFICER
+  CONTENT_MANAGER
+  CUSTOMER_SUPPORT
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  BKASH
+  CARD
+  GATEWAY
+}
+
+enum VisaApplicationStatus {
+  PENDING
+  SCHEDULED
+  APPROVED
+  REJECTED
+}
+
+enum CancellationStatus {
+  REQUESTED
+  PROCESSED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum ReviewTargetType {
+  FLIGHT
+  HOTEL
+  TOUR
+}
+
+enum CabinClass {
+  ECONOMY
+  BUSINESS
+  FIRST
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  SUITE
+  DELUXE
+}
+
+enum NoticeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ── CORE ─────────────────────────────────────────────────────
+
+model User {
+  id                  Int      @id @default(autoincrement())
+  name                String
+  email               String   @unique
+  phone               String?
+  passwordHash        String
+  role                UserRole @default(CUSTOMER)
+  isActivated         Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  flightBookings      FlightBooking[]
+  hotelBookings       HotelBooking[]
+  tourBookings        TourBooking[]
+  visaApplications    VisaApplication[]
+  reviews             Review[]
+  payments            Payment[]
+  loyaltyTransactions LoyaltyTransaction[]
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  cities    City[]
+  visaTypes VisaType[]
+  esims     Esim[]
+
+  @@map("countries")
+}
+
+model City {
+  id        Int      @id @default(autoincrement())
+  name      String
+  countryId Int
+  createdAt DateTime @default(now())
+
+  country   Country  @relation(fields: [countryId], references: [id])
+  airports  Airport[]
+  hotels    Hotel[]
+
+  @@map("cities")
+}
+
+model Notice {
+  id        Int          @id @default(autoincrement())
+  title     String
+  body      String
+  status    NoticeStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("notices")
+}
+
+// ── FLIGHTS ──────────────────────────────────────────────────
+
+model Airport {
+  id               Int      @id @default(autoincrement())
+  name             String
+  iataCode         String   @unique
+  cityId           Int
+  createdAt        DateTime @default(now())
+
+  city             City     @relation(fields: [cityId], references: [id])
+  departingFlights Flight[] @relation("DepartureAirport")
+  arrivingFlights  Flight[] @relation("ArrivalAirport")
+
+  @@map("airports")
+}
+
+model Airline {
+  id        Int      @id @default(autoincrement())
+  name      String
+  iataCode  String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+
+  flights   Flight[]
+
+  @@map("airlines")
+}
+
+model Flight {
+  id                 Int       @id @default(autoincrement())
+  flightNumber       String    @unique
+  airlineId          Int
+  departureAirportId Int
+  arrivalAirportId   Int
+  departureTime      DateTime
+  arrivalTime        DateTime
+  isVisible          Boolean   @default(true)
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  airline            Airline   @relation(fields: [airlineId], references: [id])
+  departureAirport   Airport   @relation("DepartureAirport", fields: [departureAirportId], references: [id])
+  arrivalAirport     Airport   @relation("ArrivalAirport", fields: [arrivalAirportId], references: [id])
+  fares              Fare[]
+  seats              Seat[]
+  bookingFlights     FlightBookingFlight[]
+
+  @@map("flights")
+}
+
+model Fare {
+  id           Int        @id @default(autoincrement())
+  flightId     Int
+  cabinClass   CabinClass
+  basePrice    Decimal    @db.Decimal(10, 2)
+  tax          Decimal    @db.Decimal(10, 2)
+  isRefundable Boolean    @default(false)
+  baggageKg    Int?
+  lastSyncedAt DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  flight       Flight     @relation(fields: [flightId], references: [id])
+
+  @@unique([flightId, cabinClass])
+  @@map("fares")
+}
+
+model Seat {
+  id          Int        @id @default(autoincrement())
+  flightId    Int
+  seatNumber  String
+  cabinClass  CabinClass
+  isAvailable Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  flight      Flight     @relation(fields: [flightId], references: [id])
+  passengers  Passenger[]
+
+  @@unique([flightId, seatNumber])
+  @@map("seats")
+}
+
+model FlightBooking {
+  id              Int           @id @default(autoincrement())
+  userId          Int
+  pnr             String        @unique @default(cuid())
+  status          BookingStatus @default(PENDING)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  failureReason   String?
+  errorLog        String?
+  isBillingPosted Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id])
+  bookingFlights  FlightBookingFlight[]
+  passengers      Passenger[]
+  payment         Payment?
+  cancellation    Cancellation?
+  billing         Billing?
+
+  @@map("flight_bookings")
+}
+
+model FlightBookingFlight {
+  id              Int           @id @default(autoincrement())
+  flightBookingId Int
+  flightId        Int
+
+  flightBooking   FlightBooking @relation(fields: [flightBookingId], references: [id])
+  flight          Flight        @relation(fields: [flightId], references: [id])
+
+  @@unique([flightBookingId, flightId])
+  @@map("flight_booking_flights")
+}
+
+model Passenger {
+  id              Int           @id @default(autoincrement())
+  flightBookingId Int
+  seatId          Int?
+  firstName       String
+  lastName        String
+  passportNumber  String?
+  dateOfBirth     DateTime?
+  createdAt       DateTime      @default(now())
+
+  flightBooking   FlightBooking @relation(fields: [flightBookingId], references: [id])
+  seat            Seat?         @relation(fields: [seatId], references: [id])
+
+  @@map("passengers")
+}
+
+// ── HOTELS ───────────────────────────────────────────────────
+
+model Property {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotels      Hotel[]
+
+  @@map("properties")
+}
+
+model Hotel {
+  id          Int       @id @default(autoincrement())
+  propertyId  Int?
+  cityId      Int
+  name        String
+  starRating  Int?
+  description String?
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  property    Property? @relation(fields: [propertyId], references: [id])
+  city        City      @relation(fields: [cityId], references: [id])
+  rooms       Room[]
+  bookings    HotelBooking[]
+  reviews     Review[]
+
+  @@map("hotels")
+}
+
+model Room {
+  id            Int      @id @default(autoincrement())
+  hotelId       Int
+  roomType      RoomType
+  pricePerNight Decimal  @db.Decimal(10, 2)
+  capacity      Int      @default(2)
+  isAvailable   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  hotel         Hotel    @relation(fields: [hotelId], references: [id])
+  bookings      HotelBooking[]
+
+  @@map("rooms")
+}
+
+model HotelBooking {
+  id           Int           @id @default(autoincrement())
+  userId       Int
+  hotelId      Int
+  roomId       Int
+  checkIn      DateTime
+  checkOut     DateTime
+  guestName    String
+  status       BookingStatus @default(PENDING)
+  totalAmount  Decimal       @db.Decimal(10, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  hotel        Hotel         @relation(fields: [hotelId], references: [id])
+  room         Room          @relation(fields: [roomId], references: [id])
+  payment      Payment?
+  cancellation Cancellation?
+  billing      Billing?
+
+  @@map("hotel_bookings")
+}
+
+// ── TOURS ────────────────────────────────────────────────────
+
+model Attraction {
+  id           Int               @id @default(autoincrement())
+  name         String
+  description  String?
+  imageUrl     String?
+  createdAt    DateTime          @default(now())
+
+  destinations TourDestination[]
+
+  @@map("attractions")
+}
+
+model TourPackage {
+  id           Int               @id @default(autoincrement())
+  title        String
+  description  String?
+  price        Decimal           @db.Decimal(10, 2)
+  durationDays Int
+  imageUrl     String?
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  destinations TourDestination[]
+  bookings     TourBooking[]
+
+  @@map("tour_packages")
+}
+
+model TourDestination {
+  id            Int         @id @default(autoincrement())
+  tourPackageId Int
+  attractionId  Int
+  dayNumber     Int
+  description   String?
+
+  tourPackage   TourPackage @relation(fields: [tourPackageId], references: [id])
+  attraction    Attraction  @relation(fields: [attractionId], references: [id])
+
+  @@unique([tourPackageId, attractionId])
+  @@map("tour_destinations")
+}
+
+model TourBooking {
+  id            Int           @id @default(autoincrement())
+  userId        Int
+  tourPackageId Int
+  paxCount      Int
+  tourDate      DateTime
+  status        BookingStatus @default(PENDING)
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  tourPackage   TourPackage   @relation(fields: [tourPackageId], references: [id])
+  payment       Payment?
+  cancellation  Cancellation?
+  billing       Billing?
+
+  @@map("tour_bookings")
+}
+
+// ── VISA ─────────────────────────────────────────────────────
+
+model VisaType {
+  id           Int               @id @default(autoincrement())
+  countryId    Int
+  name         String
+  description  String?
+  fee          Decimal           @db.Decimal(10, 2)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  country      Country           @relation(fields: [countryId], references: [id])
+  applications VisaApplication[]
+
+  @@map("visa_types")
+}
+
+model VisaApplication {
+  id              Int                   @id @default(autoincrement())
+  userId          Int
+  visaTypeId      Int
+  status          VisaApplicationStatus @default(PENDING)
+  interviewDate   DateTime?
+  rejectionReason String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  user            User                  @relation(fields: [userId], references: [id])
+  visaType        VisaType              @relation(fields: [visaTypeId], references: [id])
+  documents       Document[]
+  payment         Payment?
+
+  @@map("visa_applications")
+}
+
+model Document {
+  id                Int             @id @default(autoincrement())
+  visaApplicationId Int
+  fileName          String
+  fileUrl           String
+  uploadedAt        DateTime        @default(now())
+
+  visaApplication   VisaApplication @relation(fields: [visaApplicationId], references: [id])
+
+  @@map("documents")
+}
+
+// ── EXTRAS ───────────────────────────────────────────────────
+
+model Esim {
+  id        Int      @id @default(autoincrement())
+  countryId Int
+  planName  String
+  dataGb    Decimal  @db.Decimal(5, 2)
+  validDays Int
+  price     Decimal  @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  country   Country  @relation(fields: [countryId], references: [id])
+
+  @@map("esims")
+}
+
+model GiftVoucher {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  discount  Decimal  @db.Decimal(10, 2)
+  isPercent Boolean  @default(false)
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  payments  Payment[]
+
+  @@map("gift_vouchers")
+}
+
+// ── PAYMENT ──────────────────────────────────────────────────
+
+model Payment {
+  id                Int            @id @default(autoincrement())
+  userId            Int
+  amount            Decimal        @db.Decimal(10, 2)
+  method            PaymentMethod
+  status            PaymentStatus  @default(PENDING)
+  gatewayTxnId      String?
+  failureReason     String?
+  retryCount        Int            @default(0)
+  giftVoucherId     Int?
+  flightBookingId   Int?           @unique
+  hotelBookingId    Int?           @unique
+  tourBookingId     Int?           @unique
+  visaApplicationId Int?           @unique
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  user              User            @relation(fields: [userId], references: [id])
+  giftVoucher       GiftVoucher?    @relation(fields: [giftVoucherId], references: [id])
+  flightBooking     FlightBooking?  @relation(fields: [flightBookingId], references: [id])
+  hotelBooking      HotelBooking?   @relation(fields: [hotelBookingId], references: [id])
+  tourBooking       TourBooking?    @relation(fields: [tourBookingId], references: [id])
+  visaApplication   VisaApplication? @relation(fields: [visaApplicationId], references: [id])
+  refund            Refund?
+
+  @@map("payments")
+}
+
+// ── CANCELLATION & REFUND ────────────────────────────────────
+
+model Cancellation {
+  id              Int                @id @default(autoincrement())
+  flightBookingId Int?               @unique
+  hotelBookingId  Int?               @unique
+  tourBookingId   Int?               @unique
+  penalty         Decimal            @db.Decimal(10, 2) @default(0)
+  status          CancellationStatus @default(REQUESTED)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  flightBooking   FlightBooking?  @relation(fields: [flightBookingId], references: [id])
+  hotelBooking    HotelBooking?   @relation(fields: [hotelBookingId], references: [id])
+  tourBooking     TourBooking?    @relation(fields: [tourBookingId], references: [id])
+  refund          Refund?
+
+  @@map("cancellations")
+}
+
+model Refund {
+  id             Int          @id @default(autoincrement())
+  paymentId      Int          @unique
+  cancellationId Int          @unique
+  amount         Decimal      @db.Decimal(10, 2)
+  status         RefundStatus @default(PENDING)
+  gatewayRef     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  payment        Payment      @relation(fields: [paymentId], references: [id])
+  cancellation   Cancellation @relation(fields: [cancellationId], references: [id])
+
+  @@map("refunds")
+}
+
+// ── BILLING ──────────────────────────────────────────────────
+
+model Billing {
+  id              Int           @id @default(autoincrement())
+  flightBookingId Int?          @unique
+  hotelBookingId  Int?          @unique
+  tourBookingId   Int?          @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  isPosted        Boolean       @default(false)
+  postedAt        DateTime?
+  createdAt       DateTime      @default(now())
+
+  flightBooking   FlightBooking? @relation(fields: [flightBookingId], references: [id])
+  hotelBooking    HotelBooking?  @relation(fields: [hotelBookingId], references: [id])
+  tourBooking     TourBooking?   @relation(fields: [tourBookingId], references: [id])
+
+  @@map("billings")
+}
+
+// ── LOYALTY ──────────────────────────────────────────────────
+
+model LoyaltyTransaction {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  points      Int
+  description String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("loyalty_transactions")
+}
+
+// ── REVIEW ───────────────────────────────────────────────────
+
+model Review {
+  id         Int              @id @default(autoincrement())
+  userId     Int
+  hotelId    Int?
+  targetType ReviewTargetType
+  targetId   Int
+  rating     Int
+  comment    String?
+  createdAt  DateTime         @default(now())
+
+  user       User             @relation(fields: [userId], references: [id])
+  hotel      Hotel?           @relation(fields: [hotelId], references: [id])
+
+  @@map("reviews")
+}
+
+// ── NOTIFICATION ─────────────────────────────────────────────
+
+model Notification {
+  id             Int            @id @default(autoincrement())
+  userId         Int
+  title          String
+  body           String
+  isRead         Boolean        @default(false)
+  deliveryStatus DeliveryStatus @default(PENDING)
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  user           User           @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}

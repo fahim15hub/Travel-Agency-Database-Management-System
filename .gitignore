@@ -85,3 +85,6 @@ coverage/
 *.swo
 *.bak
 .cache/
+
+/generated/prisma
+DATABASE_URL="postgresql://postgres:15001500@localhost:5432/befresh?schema=public"
