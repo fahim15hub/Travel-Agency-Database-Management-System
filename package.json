@@ -2,19 +2,31 @@
   "name": "travel-agency-database-management-system",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "start": "node ./bin/www"
+    "start": "prisma migrate deploy && node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build": "prisma generate"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "~1.4.4",
+    "cors": "^2.8.6",
     "debug": "~2.6.9",
+    "dotenv": "^16.0.0",
     "express": "~4.16.1",
-    "http-errors": "~1.6.3",
-    "morgan": "~1.9.1",
-    "pug": "2.0.0-beta11"
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "~1.9.1"
   },
   "devDependencies": {
+    "nodemon": "^3.0.0",
     "prisma": "^5.22.0"
   }
 }
