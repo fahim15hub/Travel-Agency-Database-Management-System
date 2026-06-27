@@ -1,23 +1,34 @@
-import env from "./config/env.js";
-import app from "./app.js";
-import { connectDB, disconnectDB } from "./config/db.js";
+import { PrismaClient } from "@prisma/client";
 
-const PORT = env.PORT;
+const globalForPrisma = globalThis;
 
-await connectDB();
-
-const server = app.listen(PORT, () => {
-    console.log(`[server] running in ${env.NODE_ENV} mode on port ${PORT}`);
-});
-
-async function shutdown(signal) {
-    console.log(`\n[server] ${signal} received — shutting down gracefully`);
-    server.close(async () => {
-        await disconnectDB();
-        process.exit(0);
+const prisma =
+    globalForPrisma.prisma ??
+    new PrismaClient({
+        log:
+            process.env.NODE_ENV === "development"
+                ? ["query", "warn", "error"]
+                : ["warn", "error"],
     });
-    setTimeout(() => process.exit(1), 10_000);
+
+if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = prisma;
 }
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT",  () => shutdown("SIGINT"));
+const connectDB = async () => {
+    try {
+        await prisma.$connect();
+        console.log("✅ DB Connected via Prisma");
+    } catch (error) {
+        console.error(`❌ Database connection error: ${error.message}`);
+        process.exit(1);
+    }
+};
+
+const disconnectDB = async () => {
+    await prisma.$disconnect();
+    console.log("🔌 DB Disconnected");
+};
+
+export { prisma, connectDB, disconnectDB };
+export default prisma;
