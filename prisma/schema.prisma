@@ -248,7 +248,6 @@ model FlightBooking {
   totalAmount     Decimal       @db.Decimal(10, 2)
   failureReason   String?
   errorLog        String?
-  isBillingPosted Boolean       @default(false)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -258,6 +257,7 @@ model FlightBooking {
   payment         Payment?
   cancellation    Cancellation?
   billing         Billing?
+  bookingEvents   BookingEvent[]
 
   @@map("flight_bookings")
 }
@@ -288,6 +288,24 @@ model Passenger {
   seat            Seat?         @relation(fields: [seatId], references: [id])
 
   @@map("passengers")
+}
+
+// ── SYNC HEALTH MONITORING ───────────────────────────────────
+// Tracks individual sync attempt history for flights/fares, separate
+// from the single lastSyncedAt timestamp on each row. Backs Problems
+// 3, 5, 7 (sync gaps, stale fares, stale departure times) — gives Ops
+// something to diagnose failures with, not just a "last success" time.
+
+model SyncLog {
+  id           Int       @id @default(autoincrement())
+  entityType   String    // "FLIGHT" | "FARE" — which model this sync run targeted
+  entityId     Int?      // null = batch-level run, set = single-record run
+  status       String    // "SUCCESS" | "FAILED"
+  errorMessage String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@map("sync_logs")
 }
 
 // ── HOTELS ───────────────────────────────────────────────────
@@ -360,6 +378,7 @@ model HotelBooking {
   payment      Payment?
   cancellation Cancellation?
   billing      Billing?
+  bookingEvents BookingEvent[]
 
   @@map("hotel_bookings")
 }
@@ -425,6 +444,7 @@ model TourBooking {
   payment       Payment?
   cancellation  Cancellation?
   billing       Billing?
+  bookingEvents BookingEvent[]
 
   @@map("tour_bookings")
 }
@@ -591,6 +611,34 @@ model Billing {
   tourBooking     TourBooking?   @relation(fields: [tourBookingId], references: [id])
 
   @@map("billings")
+}
+
+// ── BOOKING AUDIT TRAIL ───────────────────────────────────────
+// Tracks every status transition (PENDING → CONFIRMED → CANCELLED →
+// COMPLETED, etc.) across all three booking types. Backs Problem 10
+// (diagnosing booking failures). Uses the same sparse-FK pattern as
+// Payment/Cancellation/Billing above — exactly one of the three
+// booking FKs must be set (enforced via Prisma middleware, not a DB
+// constraint — see HANDOFF.md). Shared infrastructure: every module
+// that changes a booking's status should write here via one shared
+// helper, not reimplement the insert per module.
+
+model BookingEvent {
+  id              Int       @id @default(autoincrement())
+  flightBookingId Int?
+  hotelBookingId  Int?
+  tourBookingId   Int?
+  fromStatus      String?
+  toStatus        String
+  triggeredBy     String?   // userId as string, or "SYSTEM"
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  flightBooking   FlightBooking? @relation(fields: [flightBookingId], references: [id])
+  hotelBooking    HotelBooking?  @relation(fields: [hotelBookingId], references: [id])
+  tourBooking     TourBooking?   @relation(fields: [tourBookingId], references: [id])
+
+  @@map("booking_events")
 }
 
 // ── LOYALTY ──────────────────────────────────────────────────
